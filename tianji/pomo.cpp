@@ -155,7 +155,7 @@ bool tick(Phase* ended) {
     logFocus(phaseMs, true);
     enter(nextAfterFocus(), false);  // breaks start on their own
   } else {
-    enter(FOCUS, true);  // the next focus block waits for the user
+    enter(FOCUS, !S.pomoAuto);  // the next focus block waits for the user unless auto-start is on
   }
   if (ended) *ended = was;
   return true;

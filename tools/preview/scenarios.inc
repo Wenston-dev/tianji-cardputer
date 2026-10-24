@@ -69,3 +69,14 @@
     kclick::g_state = 0; sim(0.3f); snap("kindle_off");
     kclick::g_state = 4; go(APP_HOME); press(K_ENTER); sim(0.6f); snap("kindle_dock");
   }
+  if (want("time")) {
+    extern int g_tstate;
+    g_tstate = TIME_RESTORED;
+    go(APP_HOME); sim(1.2f); snap("time_hint");
+    press('t'); sim(0.5f); snap("time_picker");
+    press(K_UP); press(K_UP); press(K_RIGHT); press('4'); press('5'); sim(0.3f); snap("time_picker_edit");
+    press(K_ENTER); sim(0.4f); snap("time_set");
+    g_tstate = TIME_NTP;
+    go(APP_SET); for (int i = 0; i < 21; ++i) press(K_DOWN); sim(0.8f); snap("set_standby");
+    go(APP_HOME);
+  }

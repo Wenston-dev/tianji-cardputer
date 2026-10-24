@@ -5,6 +5,7 @@
 #include "sfx.h"
 #include "system.h"
 #include "pomo.h"
+#include "timepick.h"
 
 namespace {
 
@@ -27,6 +28,12 @@ class Home : public App {
   bool drawsStatus() override { return true; }
 
   bool key(const KeyEvent& e) override {
+    if (picker.key(e)) return true;
+    if (e.key == 't') {
+      dockOpen = false;
+      picker.begin();
+      return true;
+    }
     if (e.key == K_ESC || e.key == K_BACK) {
       dockOpen = false;
       return true;
@@ -71,6 +78,8 @@ class Home : public App {
     if (birthdaySet() && timeState() != TIME_NONE) drawCountdown(dt);
     else drawOnboarding();
     if (dockT > 0.01f) drawDock();
+    drawTimeHint(dt);
+    picker.draw(dt);
   }
 
  private:
@@ -81,6 +90,46 @@ class Home : public App {
   long lastSec = 0;
   Mote motes[22];
   Ember embers[24];
+  TimePicker picker;
+  int lastNtp = NTP_IDLE;
+  float hintT = 0;
+
+  // The clock came back from the last save (no battery-backed RTC): say so, gently but clearly.
+  void drawTimeHint(float dt) {
+    int n = ntpState();
+    if (n != lastNtp) {
+      if (n == NTP_OK && lastNtp == NTP_BUSY) toast("已联网校时", col::JADE);
+      lastNtp = n;
+    }
+    int x = 52, y = 1;
+    if (n == NTP_BUSY) {
+      // three dots chasing each other: syncing
+      for (int i = 0; i < 3; ++i) {
+        float a = 0.5f + 0.5f * sinf(t * 6 - i * 0.9f);
+        cv.fillCircle(x + 2 + i * 5, y + 6, 1, blend565(col::INK, col::GOLD, a));
+      }
+      text("校时中", x + 18, y, &F12, col::MUTE);
+      return;
+    }
+    if (timeTrusted() || picker.open) {
+      hintT = 0;
+      return;
+    }
+    hintT += dt;
+    float in = easeOutBack(clamp01(hintT / 0.5f));
+    float p = 0.5f + 0.5f * sinf(t * 3.2f);
+    int w = textW("时间待校准 T", &F12) + 20, h = 13;
+    int yy = y - (int)((1 - in) * 14);
+    uint16_t amber = rgb(240, 160, 60);
+    glowDot(x + 7, yy + 6, 8, amber, 0.15f + 0.2f * p);
+    cv.fillRoundRect(x, yy, w, h, 6, blend565(col::INK, amber, 0.18f + 0.1f * p));
+    cv.drawRoundRect(x, yy, w, h, 6, blend565(col::INK, amber, 0.6f + 0.3f * p));
+    // tiny clock face
+    cv.drawCircle(x + 7, yy + 6, 4, amber);
+    float a = t * 2;
+    cv.drawLine(x + 7, yy + 6, x + 7 + (int)(cosf(a) * 3), yy + 6 + (int)(sinf(a) * 3), amber);
+    text("时间待校准 T", x + 14, yy, &F12, amber);
+  }
 
   void launch(int i) {
     sel = i;
@@ -114,8 +163,9 @@ class Home : public App {
   void drawOnboarding() {
     float p = 0.5f + 0.5f * sinf(t * 3);
     text("以终为始", 12, 40, &F24, col::BONE);
+    bool needTime = timeState() == TIME_NONE;
     roundPanel(12, 82, 84, 18, 9, blend565(col::INK, col::GOLD2, 0.2f + 0.2f * p), col::GOLD2);
-    text("S 设置生日", 54, 84, &F12, col::GOLD, AC);
+    text(needTime ? "T 设置时间" : "S 设置生日", 54, 84, &F12, col::GOLD, AC);
     drawYearGrid(-1, 0, 0);
   }
 

@@ -18,7 +18,7 @@ double g_epoch0 = 0;  // fake wall clock at g_us == 0
 void settingsLoad() {}
 void settingsSave() {}
 bool birthdaySet() { return S.birthY > 1900; }
-static int g_tstate = TIME_NTP;
+int g_tstate = TIME_NTP;
 void timeInit() {}
 void timeTick() {}
 int timeState() { return g_tstate; }
@@ -28,7 +28,7 @@ bool timeLocal(struct tm& out) {
   gmtime_r(&t, &out);
   return true;
 }
-void timeSetLocal(int, int, int, int, int, int) {}
+void timeSetLocal(int, int, int, int, int, int) { g_tstate = TIME_SET; }
 void timeApplyTz() {}
 long daysFromCivil(int y, unsigned m, unsigned d) {
   y -= m <= 2;
@@ -178,3 +178,11 @@ uint32_t pages() { return g_pages; }
 }  // namespace kclick
 void sfxRelease() {}
 void ntpAbort() {}
+
+// --- standby / time trust / G0 hold
+bool timeTrusted() { return g_tstate >= TIME_SET; }
+void timePersistNow() {}
+void standbyEnter(uint32_t) {}
+void standbyBootFixup() {}
+bool wokeFromStandby() { return false; }
+float g0Held() { return 0; }

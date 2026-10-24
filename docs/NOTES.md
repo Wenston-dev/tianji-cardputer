@@ -56,6 +56,16 @@ The board has one USB PHY, which normally belongs to USB-Serial/JTAG (that is wh
 - The NimBLE host + controller want ~65 KB. With the speaker, sound buffers and the WiFi stack resident, the largest free block dropped to **176 bytes** and nothing worked. So Bluetooth runs **only while the page-turner screen is open**: entering it ends the speaker, frees the sound buffers and aborts a running WiFi sync; leaving it hands everything back (about 17 KB of heap left while inside the screen, ~75 KB after leaving).
 - `ble_hs_cfg`: Just Works, bonding, legacy pairing; the advertising payload must contain Flags `0x06`, then manufacturer data `71 01 04 43` as the *first* `0xFF` AD, then the HID service UUID. See the notes in `tianji/kclick.cpp` and the protocol write-up in [Open-Kindle-Click-nRF52840/PROTOCOL.md](https://github.com/zuyan9/Open-Kindle-Click-nRF52840/blob/main/PROTOCOL.md).
 
+## Standby instead of power-off (no RTC on this board)
+
+The Cardputer ADV has no battery-backed RTC, so cutting power stops the clock; TianJi saves the time to NVS every minute and restores it on the next boot (marked untrusted, with a home-screen hint and a picker on **T**). For everyday use there is **standby** (`tianji/standby.cpp`, hold G0 for 1.5 s): the ESP32-S3 deep-sleeps and its RTC timer keeps counting.
+
+- Before sleeping: a recording is stopped and finalised, the clock is saved, WiFi/Bluetooth/speaker are shut down, the ES8311 analog side is powered down, the IMU is put to sleep, the SD card is unmounted, the panel gets `SLPIN`, and the backlight pin (GPIO38) is driven low and held with `gpio_hold_en` + `gpio_deep_sleep_hold_en` (it floats otherwise). `standbyBootFixup()` releases that hold first thing on the next boot.
+- Wake sources: **G0** (GPIO0) and **any key** — the TCA8418 keyboard controller pulls its INT line (GPIO11) low on a key event. Both are armed with `esp_sleep_enable_ext1_wakeup(…, ESP_EXT1_WAKEUP_ANY_LOW)` with RTC pull-ups (RTC peripherals stay powered for them). The keyboard's event FIFO is drained over I²C (addr 0x34: read 0x03 for the count, 0x04 per event, clear 0x02) so INT is high when the chip goes to sleep; if it still reads low, only G0 is armed. On wake both pins are `rtc_gpio_deinit`-ed back to the digital matrix.
+- Whether the clock can be trusted is kept in `RTC_NOINIT` memory, so it survives deep sleep and `esp_restart()` but not a power loss. The automatic WiFi sync runs only when the clock is **not** trusted (i.e. after a real power-off); waking from standby never starts WiFi, which would otherwise hold RAM the recorder needs. Starting a recording also aborts any sync in progress.
+- The deep-sleep clock runs on the chip's internal RC oscillator, not a crystal. Measured with a `-DSLEEPTEST` build (NTP sync, 300 s timer sleep, sync again): it ran **≈1.15 % fast** (301.0 s counted for 297.6 s asleep, ≈16.5 min/day). `standbyCorrectClock()` scales the time spent asleep back by that rate error (`DEFAULT_PPM = 11450`). With the correction the same test came out 0.08 s off after 298 s (≈280 ppm, ≈24 s/day slow), which is close to what one NTP round trip can resolve. Each NTP sync that follows a standby of at least 10 minutes moves the stored rate (NVS `rtcppm`) halfway towards the measured one, so it adapts to the particular board and temperature.
+- Waking is a full boot (about a second).
+
 ## Performance
 
 `tools/perf.sh` flashes a `-DPERFTEST` build that visits each 3D scene, throws, and stores per-frame timings in the spare flash partition. Pushing a frame costs a fixed **12.5–13 ms** (SPI), so only the drawing side can improve. Average draw time per frame:
@@ -76,6 +86,6 @@ What mattered, in order: sound synthesis (`sinf` + `expf` per sample made a long
 
 ## Handy facts
 
-- Partition table (`tianji/partitions.csv`): 6 MB app, ~1.9 MB `spiffs` partition. TianJi doesn't use it for files; the test builds (`-DSELFTEST`, `-DPERFTEST`) write their reports there, and `esptool read_flash 0x610000 …` reads them back without a serial connection.
+- Partition table (`tianji/partitions.csv`): 6 MB app, ~1.9 MB `spiffs` partition. TianJi doesn't use it for files; the test builds (`-DSELFTEST`, `-DPERFTEST`, `-DSLEEPTEST`) write their reports there, and `esptool read_flash 0x610000 …` reads them back without a serial connection.
 - Settings live in NVS (namespace `tianji`), pomodoro presets in namespace `pomo`.
 - SD layout: `/REC/YYYYMMDD_HHMMSS.wav` (+ `.txt` with marker times), `/POMO/focus.csv` (`start_unix,seconds,completed,preset`).

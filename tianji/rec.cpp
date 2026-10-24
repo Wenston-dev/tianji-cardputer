@@ -304,6 +304,8 @@ bool start(int preset) {
     err = "未检测到 SD 卡";
     return false;
   }
+  // a clock sync in progress holds the WiFi stack's RAM: the recording matters more
+  if (wifiOn() || ntpState() == NTP_BUSY) ntpAbort();
   presetI = preset;
   const Preset& p = kPresets[preset];
   rate = kRates[p.rateIdx >= 0 ? p.rateIdx : S.rateIdx];

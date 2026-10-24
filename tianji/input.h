@@ -27,5 +27,6 @@ bool keyDown(uint16_t key);  // is this key physically held right now
 void inputTextMode(bool on);  // in text mode ` , . ; / type characters unless Fn is held
 void inputFlush();
 
+float g0Held();  // seconds G0 has been held (0 when up)
 float shakeLevel();
 bool imuReady();
