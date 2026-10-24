@@ -1,0 +1,21 @@
+# build output
+build/
+build_*/
+dist/
+*.bin
+*.elf
+*.map
+
+# host preview
+tools/preview/obj/
+tools/preview/out/
+tools/preview/preview
+tools/preview/preview.dSYM/
+
+# probe sketches
+tools/mictest/build*/
+
+# misc
+.DS_Store
+__pycache__/
+*.pyc

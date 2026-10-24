@@ -1,0 +1,3 @@
+# generated glyph table: keep it out of language statistics and diffs
+tianji/fontdata.cpp linguist-generated=true -diff
+tianji/lunar_table.inc linguist-generated=true
