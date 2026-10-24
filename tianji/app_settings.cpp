@@ -4,6 +4,7 @@
 #include "rec.h"
 #include "sfx.h"
 #include "system.h"
+#include "version.h"
 #include "kclick.h"
 #include "pomo.h"
 #include "standby.h"
@@ -159,7 +160,7 @@ class Settings_ : public App {
       case R_USB: strcpy(b, "Enter"); break;
       case R_POMOAUTO: toggle(y, S.pomoAuto, on); return;
       case R_STANDBY: strcpy(b, "长按 G0"); break;
-      case R_ABOUT: strcpy(b, "天机 1.0"); break;
+      case R_ABOUT: strcpy(b, "天机 " TIANJI_VERSION); break;
       default: b[0] = 0;
     }
     text(b, SW - 12, y + 1, &F12, c, AR);

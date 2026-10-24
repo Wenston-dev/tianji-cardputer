@@ -18,6 +18,7 @@
 #include <services/gap/ble_svc_gap.h>
 #include <services/gatt/ble_svc_gatt.h>
 #include "system.h"
+#include "version.h"
 
 #include <Preferences.h>
 
@@ -49,7 +50,7 @@ static const uint8_t HID_INFO[4] = {0x11, 0x01, 0x00, 0x03};
 static const uint8_t REPORT_REF_IN1[2] = {0x01, 0x01};
 static const char DIS_MFG[] = "TianJi";
 static const char DIS_MODEL[] = "Cardputer ADV";
-static const char DIS_FW[] = "TianJi 1.0";
+static const char DIS_FW[] = "TianJi " TIANJI_VERSION;
 
 // One input report (ID 1): boot-keyboard layout + one 16-bit consumer usage, all in one
 // application collection so the Kindle's evdev node gets autorepeat for brightness.

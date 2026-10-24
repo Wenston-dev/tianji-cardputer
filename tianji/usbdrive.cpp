@@ -8,6 +8,7 @@
 #include "soc/usb_serial_jtag_reg.h"
 #include "tusb.h"
 #include "rec.h"
+#include "version.h"
 
 namespace usbdrive {
 
@@ -85,7 +86,7 @@ bool begin() {
   if (rec::state() != rec::IDLE || !rec::sdBegin()) return false;
   msc.vendorID("TianJi");
   msc.productID("Cardputer SD");
-  msc.productRevision("1.0");
+  msc.productRevision(TIANJI_VERSION);
   msc.onRead(onRead);
   msc.onWrite(onWrite);
   msc.onStartStop(onStartStop);
