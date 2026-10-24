@@ -5,6 +5,9 @@
 #include "sfx.h"
 #include "system.h"
 #include "kclick.h"
+#include "pomo.h"
+#include "standby.h"
+#include "timepick.h"
 
 namespace {
 
@@ -26,16 +29,18 @@ enum Row {
   R_RECDIM,
   R_RECOFF,
   R_POMOOFF,
+  R_POMOAUTO,
   R_BLE,
   R_USBAUTO,
   R_USB,
+  R_STANDBY,
   R_ABOUT,
   R_N
 };
 
 const char* kNames[R_N] = {"生日",   "预期寿命", "日期时间", "WiFi 名称", "WiFi 密码", "联网校时", "自动校时", "校时后关WiFi",
                            "时区",   "亮度",     "音量",     "音效",      "录音采样率", "录音增益",
-                           "录音调暗", "录音熄屏", "专注熄屏", "蓝牙翻页器", "插电自动U盘", "U盘模式", "关于"};
+                           "录音调暗", "录音熄屏", "专注熄屏", "番茄钟自动开始", "蓝牙翻页器", "插电自动U盘", "U盘模式", "进入待机", "关于"};
 
 constexpr int RH = 18;
 
@@ -51,6 +56,7 @@ class Settings_ : public App {
   }
 
   bool key(const KeyEvent& e) override {
+    if (picker.key(e)) return true;
     if (editing >= 0) return keyEdit(e);
     if (e.key == K_UP) sel = (sel + R_N - 1) % R_N, sfxTick(1.2f, 0.3f);
     else if (e.key == K_DOWN) sel = (sel + 1) % R_N, sfxTick(1.2f, 0.3f);
@@ -78,6 +84,7 @@ class Settings_ : public App {
       drawValue(i, y, on);
     }
     if (editing >= 0) drawEditor();
+    picker.draw(dt);
   }
 
  private:
@@ -87,6 +94,7 @@ class Settings_ : public App {
   uint32_t restartAt = 0;
   char buf[66];
   char err[32] = "";
+  TimePicker picker;
 
   void bar(int y, float v, bool on) {
     int x = SW - 70, w = 58;
@@ -141,7 +149,7 @@ class Settings_ : public App {
       case R_WIFIOFF: toggle(y, S.wifiAutoOff, on); return;
       case R_BLE: toggle(y, S.ble, on); return;
       case R_NTPMODE: {
-        const char* m[] = {"关闭", "开机时", "每天"};
+        const char* m[] = {"关闭", "断电后", "每天"};
         snprintf(b, sizeof b, "‹ %s ›", m[S.ntpMode]);
       } break;
       case R_POMOOFF:
@@ -149,6 +157,8 @@ class Settings_ : public App {
         else strcpy(b, "‹ 不熄屏 ›");
         break;
       case R_USB: strcpy(b, "Enter"); break;
+      case R_POMOAUTO: toggle(y, S.pomoAuto, on); return;
+      case R_STANDBY: strcpy(b, "长按 G0"); break;
       case R_ABOUT: strcpy(b, "天机 1.0"); break;
       default: b[0] = 0;
     }
@@ -182,6 +192,7 @@ class Settings_ : public App {
         break;
       case R_NTPMODE: S.ntpMode = (S.ntpMode + 3 + d) % 3; break;
       case R_POMOOFF: S.pomoOffIdx = (S.pomoOffIdx + 4 + d) % 4; break;
+      case R_POMOAUTO: S.pomoAuto = !S.pomoAuto; break;
       default: return;
     }
     dirty = true;
@@ -194,11 +205,7 @@ class Settings_ : public App {
         if (birthdaySet()) snprintf(buf, sizeof buf, "%04d-%02d-%02d", S.birthY, S.birthM, S.birthD);
         else buf[0] = 0;
         break;
-      case R_CLOCK: {
-        struct tm tm;
-        if (timeLocal(tm)) snprintf(buf, sizeof buf, "%04d-%02d-%02d %02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min);
-        else buf[0] = 0;
-      } break;
+      case R_CLOCK: picker.begin(); return;
       case R_SSID: strlcpy(buf, S.ssid, sizeof buf); break;
       case R_PASS: strlcpy(buf, S.pass, sizeof buf); break;
       case R_SYNC:
@@ -207,6 +214,11 @@ class Settings_ : public App {
         if (ntpState() == NTP_FAIL) toast("先设置 WiFi", col::CINNABAR);
         return;
       case R_USB: openUsbDrive(false); return;
+      case R_STANDBY:
+        if (dirty) settingsSave(), dirty = false;
+        if (pomo::phase() != pomo::IDLE) toast("番茄钟计时中", col::CINNABAR);
+        else standbyEnter();
+        return;
       default: adjust(1); return;
     }
     editing = sel;
@@ -235,7 +247,7 @@ class Settings_ : public App {
   }
 
   void commit() {
-    int y, mo, d, h, mi;
+    int y, mo, d;
     switch (editing) {
       case R_BIRTH:
         if ((sscanf(buf, "%d-%d-%d", &y, &mo, &d) == 3 || (strlen(buf) == 8 && sscanf(buf, "%4d%2d%2d", &y, &mo, &d) == 3)) &&
@@ -245,15 +257,6 @@ class Settings_ : public App {
           S.birthD = d;
         } else {
           strcpy(err, "格式 1990-01-31");
-          return;
-        }
-        break;
-      case R_CLOCK:
-        if (sscanf(buf, "%d-%d-%d %d:%d", &y, &mo, &d, &h, &mi) == 5 && y >= 2020 && mo >= 1 && mo <= 12 && d >= 1 &&
-            d <= 31 && h < 24 && mi < 60) {
-          timeSetLocal(y, mo, d, h, mi, 0);
-        } else {
-          strcpy(err, "格式 2026-10-23 15:30");
           return;
         }
         break;

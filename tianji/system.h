@@ -22,6 +22,7 @@ struct Settings {
   bool wifiAutoOff = true;  // radio off as soon as the clock is synced
   uint8_t pomoOffIdx = 1;   // kPomoOff
   bool ble = true;          // Bluetooth for the Kindle page turner
+  bool pomoAuto = false;    // after a break, start the next focus block without waiting for Space
 };
 extern Settings S;
 
@@ -38,6 +39,9 @@ enum TimeState { TIME_NONE = 0, TIME_RESTORED = 1, TIME_SET = 2, TIME_NTP = 3 };
 void timeInit();
 void timeTick();
 int timeState();
+// The clock can be trusted (set by hand or synced), as opposed to restored from the last save.
+bool timeTrusted();
+void timePersistNow();  // save the clock to flash now (before standby)
 bool timeLocal(struct tm& out);
 double nowSec();  // unix seconds with sub-second precision
 void timeSetLocal(int y, int mo, int d, int h, int mi, int s);

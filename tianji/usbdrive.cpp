@@ -46,7 +46,7 @@ bool hostArrived() {
     bootChecked = true;
     // after leaving drive mode, or a reset from the flashing tool, wait for a fresh plug-in
     esp_reset_reason_t why = esp_reset_reason();
-    suppressed = suppressMagic == SUPPRESS || why == ESP_RST_USB || why == ESP_RST_WDT;
+    suppressed = suppressMagic == SUPPRESS || why == ESP_RST_USB || why == ESP_RST_WDT || why == ESP_RST_DEEPSLEEP;
     suppressMagic = 0;
     absentSince = 0;
   }

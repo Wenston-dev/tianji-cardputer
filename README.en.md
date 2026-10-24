@@ -47,11 +47,11 @@ arduino-cli lib install M5Cardputer@1.1.1 M5Unified@0.2.17 M5GFX@0.2.22
 
 The glyph table `tianji/fontdata.cpp` is committed, so no font is needed to build. To regenerate it after changing UI text, install Pillow, download [Source Han Sans](https://github.com/adobe-fonts/source-han-sans) (variable OTF) and set `SOURCE_HAN_SANS=/path/to/font.otf` (see `tools/mkfont.py`).
 
-**First run:** press **S** for Settings and enter the date/time and your birthday (there is no battery-backed clock). Recording and pomodoro stats need a **FAT32** SD card.
+**First run:** press **T** on the home screen to set the date and time, and **S** → Settings for your birthday. There is no battery-backed clock, so **hold G0 for standby** instead of switching the device off: the clock keeps running in standby and any key (or G0) wakes it. After a real power-off the home screen shows a "time needs setting" hint (press **T**); with WiFi configured it syncs by itself after a power-off — never after standby, so the recorder keeps its RAM. Recording and pomodoro stats need a **FAT32** SD card.
 
 ## Keys
 
-Home: arrows/Enter open the dock; letters jump straight in — **L** 小六壬, **Q** sticks, **J** 掷筊, **D** dice, **C** coin, **R** recorder, **F** library, **P** pomodoro, **K** page turner, **S** settings, **U** USB drive. **Esc** goes home from anywhere. The throwing screens use **hold Space** to charge, release to throw; dice count is **1–6**. In the page turner: arrows/Space turn pages, **- / =** brightness, **Z** puts the Kindle to sleep, **F** twice forgets the pairing. See the Chinese README for the full table.
+Home: arrows/Enter open the dock; letters jump straight in — **L** 小六壬, **Q** sticks, **J** 掷筊, **D** dice, **C** coin, **R** recorder, **F** library, **P** pomodoro, **K** page turner, **S** settings, **U** USB drive, **T** set the clock. **G0** click toggles recording anywhere; **hold G0** 1.5 s for standby. **Esc** goes home from anywhere. Settings has a "pomodoro auto-start" switch that starts the next focus block when a break ends. The throwing screens use **hold Space** to charge, release to throw; dice count is **1–6**. In the page turner: arrows/Space turn pages, **- / =** brightness, **Z** puts the Kindle to sleep, **F** twice forgets the pairing. See the Chinese README for the full table.
 
 ## Status
 

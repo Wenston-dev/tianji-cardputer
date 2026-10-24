@@ -7,6 +7,7 @@
 #include "usbdrive.h"
 #include "pomo.h"
 #include "kclick.h"
+#include "standby.h"
 #ifdef SELFTEST
 static void note(int slot, const char* fmt, ...);
 #endif
@@ -60,7 +61,109 @@ static void recDot() {
   cv.fillCircle(SW - 7, 6, 2, rec::state() == rec::RECORDING ? col::CINNABAR : col::DIM);
 }
 
+#ifdef SLEEPTEST
+#include "esp_partition.h"
+#include "esp_sleep.h"
+// Build with -DSLEEPTEST: sync over NTP, sleep 300 s on a timer, wake, sync again and record how far
+// the clock drifted while asleep. Notes go to the spiffs partition (esptool read_flash 0x610000).
+RTC_NOINIT_ATTR static double stSleepAt;
+RTC_NOINIT_ATTR static uint32_t stMagic;
+static double stWakeDev = 0;
+static uint32_t stWakeUs = 0;
+static void stNote(int slot, const char* fmt, ...) {
+  const esp_partition_t* p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "spiffs");
+  if (!p) return;
+  char line[200] = {0};
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(line, sizeof line - 1, fmt, ap);
+  va_end(ap);
+  strcat(line, "\n");
+  esp_partition_write(p, slot * 200, line, sizeof line);
+}
+static void sleepTestBoot() {
+  if (!wokeFromStandby()) {
+    const esp_partition_t* p = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "spiffs");
+    if (p) esp_partition_erase_range(p, 0, 4096);
+    stMagic = 0;
+  }
+}
+static void sleepTest() {
+  static int stage = 0;
+  static uint32_t t0 = millis();
+  if (stage == 0 && !wokeFromStandby()) {
+    if (ntpState() == NTP_IDLE && millis() > 3000) ntpStart();
+    if (ntpState() == NTP_OK) {
+      stNote(0, "boot1 synced t=%.3f trusted=%d", nowSec(), (int)timeTrusted());
+      stSleepAt = nowSec();
+      stMagic = 0x51ee7;
+      stage = 9;
+      standbyEnter(300);
+    } else if (millis() - t0 > 45000) {
+      stNote(0, "boot1 ntp failed state=%d ssid=%d", ntpState(), (int)(S.ssid[0] != 0));
+      stage = 99;
+    }
+  }
+  if (stage == 0 && wokeFromStandby()) {
+    stWakeDev = nowSec();  // already corrected by standbyCorrectClock()
+    stWakeUs = micros();
+    stNote(1, "wake cause=%d ext1=0x%llx state=%d magic=%d devNow=%.3f slept(dev)=%.1f", (int)esp_sleep_get_wakeup_cause(),
+           (unsigned long long)esp_sleep_get_ext1_wakeup_status(), timeState(), (int)(stMagic == 0x51ee7), stWakeDev,
+           stWakeDev - stSleepAt);
+    stage = 1;
+    if (ntpState() != NTP_BUSY) ntpStart();
+  }
+  if (stage == 1) {
+    if (ntpState() == NTP_OK) {
+      double truth = nowSec();
+      double expect = stWakeDev + (micros() - stWakeUs) * 1e-6;
+      double off = truth - expect;
+      double slept = (stWakeDev + off) - stSleepAt;  // true elapsed from sleep to wake (awake parts are exact)
+      stNote(2, "after correction: offset=%.3f s over %.1f s asleep -> %.0f ppm = %.1f s/day (clock %s)", off, slept,
+             off / slept * 1e6, off / slept * 86400, off > 0 ? "slow" : "fast");
+      stage = 2;
+    } else if (millis() - t0 > 45000) {
+      stNote(2, "resync failed state=%d", ntpState());
+      stage = 2;
+    }
+  }
+}
+#endif
+
+// Hold G0 for standby: a ring fills around the button's corner; at full it goes to sleep.
+static void standbyHold() {
+  float h = g0Held();
+  if (h < 0.35f) return;
+  if (cur == APP_USB) return;
+  powerActivity();
+  if (pomo::phase() != pomo::IDLE) {
+    static uint32_t warned = 0;
+    if (millis() - warned > 3000) toast("番茄钟计时中", col::CINNABAR), warned = millis();
+    return;
+  }
+  float k = clamp01((h - 0.35f) / 1.15f);
+  if (screenAwake()) {
+    darkenRect(0, 0, SW, SH, 1.0f - 0.5f * k);
+    int cx = SW / 2, cy = SH / 2 - 6;
+    cv.fillArc(cx, cy, 22, 19, 0, 360, col::INK3);
+    cv.fillArc(cx, cy, 22, 19, -90, -90 + 360 * k, col::GOLD);
+    glowDot(cx, cy, 30, col::GOLD, 0.2f * k);
+    // a crescent moon in the middle
+    cv.fillCircle(cx, cy, 8, col::BONE);
+    cv.fillCircle(cx + 4, cy - 3, 7, scale565(col::INK, 1.0f));
+    text("待机", cx, cy + 28, &F12, blend565(col::MUTE, col::BONE, k), AC);
+  }
+  if (k >= 1) {
+    present();
+    standbyEnter();
+  }
+}
+
 void setup() {
+  standbyBootFixup();
+#ifdef SLEEPTEST
+  sleepTestBoot();
+#endif
   auto cfg = M5.config();
   cfg.internal_imu = true;
   cfg.internal_mic = true;
@@ -71,6 +174,7 @@ void setup() {
   setBacklightNow();
   inputInit();
   timeInit();
+  standbyCorrectClock();
   sfxInit();
   M5.Speaker.begin();  // without this, sound effects stay silent until a recording restarts it
   M5.Speaker.setVolume(S.volume);
@@ -94,7 +198,9 @@ void setup() {
   apps[APP_KINDLE] = makeKindle();
   apps[cur]->enter();
 
-  if (S.ssid[0] && S.ntpMode >= 1) ntpStart();
+  // Sync only when the clock actually stopped (a real power-off). After standby or a restart the RTC
+  // kept counting, and WiFi would only sit on RAM the recorder may need the moment you wake it.
+  if (S.ssid[0] && S.ntpMode >= 1 && !timeTrusted()) ntpStart();
   lastUs = micros();
 }
 
@@ -252,6 +358,9 @@ void loop() {
 #ifdef SELFTEST
   selfTest();
 #endif
+#ifdef SLEEPTEST
+  sleepTest();
+#endif
   uint32_t nowUs = micros();
   float dt = (nowUs - lastUs) * 1e-6f;
   lastUs = nowUs;
@@ -281,7 +390,8 @@ void loop() {
     powerActivity();  // light the screen for the change of phase
     sfxChime(1.0f, 0.8f);
     sfxChime(1.5f, 0.6f);
-    toast(ended == pomo::FOCUS ? "专注完成 · 休息一下" : "休息结束 · 空格开始", ended == pomo::FOCUS ? col::GOLD : col::JADE);
+    toast(ended == pomo::FOCUS ? "专注完成 · 休息一下" : S.pomoAuto ? "休息结束 · 开始专注" : "休息结束 · 空格开始",
+          ended == pomo::FOCUS ? col::GOLD : col::JADE);
   }
 
   KeyEvent e;
@@ -293,6 +403,7 @@ void loop() {
     if ((e.key == K_ESC || e.key == K_BACK) && cur != APP_HOME) go(APP_HOME);
   }
   if (shakeLevel() > 0.6f && rec::state() == rec::IDLE) powerActivity();
+  if (g0Held() > 0.15f && !screenAwake()) powerActivity();  // holding G0 in the dark: show the standby ring
   powerTick(dt);
 
   if (screenAwake()) {
@@ -302,6 +413,7 @@ void loop() {
     apps[cur]->frame(dt);
     recDot();
     drawToast(dt);
+    standbyHold();
 #ifdef PERFTEST
     uint32_t b = micros();
 #endif

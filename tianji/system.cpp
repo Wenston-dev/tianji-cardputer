@@ -7,6 +7,7 @@
 #include "rec.h"
 #include "pomo.h"
 #include "kclick.h"
+#include "standby.h"
 
 Settings S;
 static Preferences prefs;
@@ -32,6 +33,7 @@ void settingsLoad() {
   S.wifiAutoOff = prefs.getBool("wfoff", true);
   S.pomoOffIdx = prefs.getUChar("poff", 1) % 4;
   S.ble = prefs.getBool("ble", true);
+  S.pomoAuto = prefs.getBool("pauto", false);
   prefs.end();
 }
 
@@ -56,6 +58,7 @@ void settingsSave() {
   prefs.putBool("wfoff", S.wifiAutoOff);
   prefs.putUChar("poff", S.pomoOffIdx);
   prefs.putBool("ble", S.ble);
+  prefs.putBool("pauto", S.pomoAuto);
   prefs.end();
 }
 
@@ -64,6 +67,15 @@ bool birthdaySet() { return S.birthY > 1900 && S.birthM >= 1 && S.birthD >= 1; }
 // ---------------------------------------------------------------- time
 
 static int tState = TIME_NONE;
+// Survives esp_restart() and deep sleep (not power loss): whether the running clock is trusted.
+RTC_NOINIT_ATTR static uint32_t rtcTimeMagic, rtcTimeState;
+static constexpr uint32_t TIME_MAGIC = 0x7469346d;
+
+static void setTimeState(int s) {
+  tState = s;
+  rtcTimeState = s;
+  rtcTimeMagic = TIME_MAGIC;
+}
 static uint32_t lastPersist = 0;
 
 long daysFromCivil(int y, unsigned m, unsigned d) {
@@ -94,7 +106,9 @@ static void persistTime() {
 void timeInit() {
   timeApplyTz();
   if (time(nullptr) > 1600000000) {
-    tState = TIME_SET;  // survived a soft reset
+    // the RTC kept counting: a restart or a wake from standby; keep what we knew about the clock
+    setTimeState(rtcTimeMagic == TIME_MAGIC && rtcTimeState <= TIME_NTP ? (int)rtcTimeState : TIME_SET);
+    lastPersist = millis();
     return;
   }
   prefs.begin("tianji", true);
@@ -103,12 +117,16 @@ void timeInit() {
   if (e > 1600000000) {
     struct timeval tv = {(time_t)e, 0};
     settimeofday(&tv, nullptr);
-    tState = TIME_RESTORED;
+    setTimeState(TIME_RESTORED);
   }
   lastPersist = millis();
 }
 
 int timeState() { return tState; }
+bool timeTrusted() { return tState >= TIME_SET; }
+void timePersistNow() {
+  if (tState != TIME_NONE) persistTime();
+}
 
 bool timeLocal(struct tm& out) {
   time_t t = time(nullptr);
@@ -128,7 +146,7 @@ void timeSetLocal(int y, int mo, int d, int h, int mi, int s) {
   time_t t = (time_t)days * 86400 + h * 3600 + mi * 60 + s - S.tzMin * 60;
   struct timeval tv = {t, 0};
   settimeofday(&tv, nullptr);
-  tState = TIME_SET;
+  setTimeState(TIME_SET);
   persistTime();
 }
 
@@ -176,7 +194,8 @@ void timeTick() {
   if (nState == NTP_BUSY) {
     if (ntpSynced) {
       nState = NTP_OK;
-      tState = TIME_NTP;
+      setTimeState(TIME_NTP);
+      standbyOnSync();
       synced = true;
       lastSyncMs = millis();
       persistTime();

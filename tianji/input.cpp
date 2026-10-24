@@ -16,6 +16,7 @@ static bool imuOk = false;
 static float accBase = 0;  // resting magnitude, whatever units the IMU reports
 static float prevA[3];
 static bool havePrev = false;
+static uint32_t g0Since = 0;
 
 static bool isModifier(int r, int c) {
   return (r == 2 && (c == 0 || c == 1)) || (r == 3 && c <= 2);
@@ -103,11 +104,17 @@ void inputPoll() {
   memcpy(held, next, sizeof(Held) * nextN);
   heldN = nextN;
 
-  if (M5.BtnA.wasPressed()) {
-    KeyEvent e{};
-    e.key = K_G0;
-    push(e);
+  // G0: a short click is a key event (on release); holding it is reported by g0Held() (standby)
+  if (M5.BtnA.wasPressed()) g0Since = now;
+  if (M5.BtnA.wasReleased()) {
+    if (g0Since && now - g0Since < 600) {
+      KeyEvent e{};
+      e.key = K_G0;
+      push(e);
+    }
+    g0Since = 0;
   }
+  if (g0Since && !M5.BtnA.isPressed()) g0Since = 0;
 
   if (imuOk) {
     float ax, ay, az;
@@ -129,6 +136,8 @@ void inputPoll() {
     }
   }
 }
+
+float g0Held() { return g0Since ? (millis() - g0Since) / 1000.0f : 0; }
 
 bool inputNext(KeyEvent& e) {
   if (qh == qt) return false;

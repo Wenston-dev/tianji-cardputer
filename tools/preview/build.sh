@@ -25,7 +25,7 @@ done
 APPS="$T/gfx.cpp $T/r3d.cpp $T/lunar.cpp $T/launch.cpp $T/fontdata.cpp $T/app_home.cpp $T/app_liuren.cpp"
 DEF=""
 if [ "$1" == "all" ]; then
-  APPS="$APPS $(ls $T/app_qian.cpp $T/app_jiao.cpp $T/app_dice.cpp $T/app_coin.cpp $T/app_recorder.cpp $T/app_library.cpp $T/app_settings.cpp $T/app_usb.cpp $T/app_pomo.cpp $T/app_kindle.cpp $T/data_qian.cpp 2>/dev/null) host_store.cpp"
+  APPS="$APPS $(ls $T/app_qian.cpp $T/app_jiao.cpp $T/app_dice.cpp $T/app_coin.cpp $T/app_recorder.cpp $T/app_library.cpp $T/app_settings.cpp $T/app_usb.cpp $T/app_pomo.cpp $T/app_kindle.cpp $T/timepick.cpp $T/data_qian.cpp 2>/dev/null) host_store.cpp"
   DEF="-DHAVE_ALL"
 fi
 clang++ $CXXFLAGS $DEF $APPS host_stubs.cpp main.cpp obj/*.o -L/opt/homebrew/lib -lSDL2 -o preview
